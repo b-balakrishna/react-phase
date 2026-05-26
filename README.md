@@ -2,7 +2,7 @@
 
 A phase-first lifecycle abstraction for React.
 
-`react-phase` helps you manage component lifecycle logic without directly depending on `useEffect`. Instead of scattering side effects across multiple effects, `react-phase` provides structured lifecycle phases with readable and controllable update execution.
+`react-phase` helps you manage component lifecycle logic without directly depending on `useEffect`. Instead of scattering side effects across multiple effects, `react-phase` provides structured lifecycle phases with readable and controllable update execution — fully typed with TypeScript.
 
 ---
 
@@ -22,12 +22,12 @@ Managing side effects in React often becomes difficult because:
 - explicit lifecycle phases
 - mount / unmount / update separation
 - AND / OR dependency execution
-- custom dependency matchers
+- custom dependency matchers via `.when()`
 - debounce & throttle support
 - async phase orchestration
-- request cancellation
+- request cancellation via `AbortSignal`
 - retry handling
-- cleaner lifecycle orchestration
+- full TypeScript support
 
 ---
 
@@ -45,7 +45,7 @@ Managing side effects in React often becomes difficult because:
 
     import { usePhase } from "react-phase";
 
-    function App({ user, token, search }) {
+    function App({ user, token, search }: Props) {
       const { onMount, onUnmount, onUpdate } = usePhase();
 
       onMount(() => {
@@ -56,11 +56,11 @@ Managing side effects in React often becomes difficult because:
         console.log("cleanup");
       });
 
-      onUpdate([user, token], () => {
+      onUpdate([user, token] as const, () => {
         console.log("both changed");
       }).and();
 
-      onUpdate([search], () => {
+      onUpdate([search] as const, () => {
         console.log("searching...");
       }).debounce(500);
 
@@ -85,10 +85,11 @@ Managing side effects in React often becomes difficult because:
 
 ### `onMount`
 
-Runs once after component mount.
+Runs once after component mount. Supports optional cleanup via return value.
 
     onMount(() => {
-      console.log("mounted");
+      const timer = setInterval(tick, 1000);
+      return () => clearInterval(timer); // cleanup
     });
 
 ### `onUnmount`
@@ -101,11 +102,9 @@ Runs once before component unmount.
 
 ### `onUpdate`
 
-Runs when dependencies change.
+Runs when dependencies change. Returns a chainable `PhaseController`.
 
-    onUpdate(dependencies, callback);
-
-    onUpdate([count], () => {
+    onUpdate([count] as const, () => {
       console.log("count changed");
     });
 
@@ -117,12 +116,12 @@ Runs when dependencies change.
 
 By default, updates run when **any** dependency changes.
 
-    onUpdate([user, token], () => {
+    onUpdate([user, token] as const, () => {
       console.log("either changed");
     });
 
     // equivalent to:
-    onUpdate([user, token], () => {
+    onUpdate([user, token] as const, () => {
       console.log("either changed");
     }).or();
 
@@ -130,28 +129,19 @@ By default, updates run when **any** dependency changes.
 
 Run only when **all** dependencies change.
 
-    onUpdate([user, token], () => {
+    onUpdate([user, token] as const, () => {
       console.log("both changed");
     }).and();
 
 ---
 
-## Smart Matchers
+## Custom Matchers — `.when()`
 
 Create fully custom dependency execution logic using `.when()`.
 
-Useful for:
-- advanced update conditions
-- threshold-based updates
-- selective dependency matching
-- business-rule-driven execution
+`.when()` takes priority over `.and()` and `.or()`.
 
-    onUpdate(dependencies, callback)
-      .when((prev, current) => boolean);
-
-**Threshold example:**
-
-    onUpdate([price], () => {
+    onUpdate([price] as const, () => {
       console.log("threshold crossed");
     }).when((prev, current) => {
       return prev[0] < 1000 && current[0] >= 1000;
@@ -159,16 +149,15 @@ Useful for:
 
 **Authentication example:**
 
-    onUpdate([user, token], () => {
+    onUpdate([user, token] as const, () => {
       console.log("authenticated");
     }).when((prev, current) => {
       const [prevUser, prevToken] = prev;
       const [currentUser, currentToken] = current;
-
-      return !prevUser && !prevToken && currentUser && currentToken;
+      return !prevUser && !prevToken && !!currentUser && !!currentToken;
     });
 
-> **Match Priority**: When `.when()` is used, `.and()` and `.or()` are ignored — custom matching becomes the execution source of truth.
+The matcher receives strongly-typed `prev` and `current` arrays matching the shape of the deps tuple.
 
 ---
 
@@ -178,7 +167,7 @@ Delay execution until dependency changes stop for a specified duration.
 
 Useful for: search inputs, API calls, expensive computations, resize handlers.
 
-    onUpdate([search], () => {
+    onUpdate([search] as const, () => {
       fetchResults(search);
     }).debounce(500);
 
@@ -192,7 +181,7 @@ Limit how frequently updates can execute.
 
 Useful for: scroll events, mouse movement, rapid state updates, performance-sensitive operations.
 
-    onUpdate([scrollY], () => {
+    onUpdate([scrollY] as const, () => {
       console.log(scrollY);
     }).throttle(200);
 
@@ -204,11 +193,9 @@ The update runs at most once every 200ms.
 
 `react-phase` supports async lifecycle execution with built-in orchestration helpers.
 
-Useful for: API requests, async state synchronization, preventing race conditions, request cancellation, loading workflows.
-
 ### Async Updates
 
-    onUpdate([userId], async () => {
+    onUpdate([userId] as const, async () => {
       const response = await fetch(`/api/users/${userId}`);
       const data = await response.json();
       setUser(data);
@@ -218,16 +205,11 @@ Useful for: API requests, async state synchronization, preventing race condition
 
 When dependencies change rapidly, older async executions are automatically ignored — only the latest execution is applied.
 
-    onUpdate([search], async () => {
-      const response = await searchApi(search);
-      setResults(response);
-    });
-
 ### Abort Support
 
 Async phases receive an `AbortSignal`. When the component unmounts, dependencies change, or execution becomes stale, the previous request is aborted automatically.
 
-    onUpdate([userId], async ({ signal }) => {
+    onUpdate([userId] as const, async ({ signal }) => {
       const response = await fetch(`/api/users/${userId}`, { signal });
       const data = await response.json();
       setUser(data);
@@ -235,13 +217,15 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 
 ### Retry Support
 
-    onUpdate([userId], async () => {
+Retries failed executions up to N times with exponential backoff.
+
+    onUpdate([userId] as const, async () => {
       return fetchUser(userId);
     }).retry(3);
 
 ### Error Handling
 
-    onUpdate([userId], async () => {
+    onUpdate([userId] as const, async () => {
       return fetchUser(userId);
     }).catch((error) => {
       console.error(error);
@@ -249,7 +233,9 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 
 ### Async State
 
-    const request = onUpdate([userId], async () => {
+The controller exposes reactive loading/error/success state.
+
+    const request = onUpdate([userId] as const, async () => {
       return fetchUser(userId);
     });
 
@@ -263,7 +249,7 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 
     import { usePhase } from "react-phase";
 
-    function Dashboard({ user, token, search, scrollY, price }) {
+    function Dashboard({ user, token, search, scrollY, price }: Props) {
       const { onMount, onUnmount, onUpdate } = usePhase();
 
       onMount(() => {
@@ -274,11 +260,11 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
         console.log("Dashboard cleanup");
       });
 
-      onUpdate([user, token], () => {
+      onUpdate([user, token] as const, () => {
         console.log("Both changed");
       }).and();
 
-      onUpdate([search], async ({ signal }) => {
+      onUpdate([search] as const, async ({ signal }) => {
         const response = await fetch(`/api/search?q=${search}`, { signal });
         return response.json();
       })
@@ -286,11 +272,11 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
         .retry(2)
         .catch(console.error);
 
-      onUpdate([scrollY], () => {
+      onUpdate([scrollY] as const, () => {
         console.log("Tracking scroll...");
       }).throttle(100);
 
-      onUpdate([price], () => {
+      onUpdate([price] as const, () => {
         console.log("Threshold crossed");
       }).when((prev, current) => {
         return prev[0] < 1000 && current[0] >= 1000;
@@ -338,7 +324,7 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
     function App() {
       const onUpdate = useUpdate();
 
-      onUpdate([count], () => {
+      onUpdate([count] as const, () => {
         console.log("updated");
       });
 
@@ -351,15 +337,15 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 
 `onUpdate()` returns a chainable phase controller.
 
-| Method            | Description                      |
-|-------------------|----------------------------------|
-| `.and()`          | Run when ALL dependencies change |
-| `.or()`           | Run when ANY dependency changes  |
-| `.when(fn)`      | Custom dependency matcher        |
-| `.debounce(ms)`   | Delay execution                  |
-| `.throttle(ms)`   | Limit execution frequency        |
-| `.retry(count)`   | Retry failed async phases        |
-| `.catch(handler)` | Handle async errors              |
+| Method            | Description                        |
+|-------------------|------------------------------------|
+| `.and()`          | Run when ALL dependencies change   |
+| `.or()`           | Run when ANY dependency changes    |
+| `.when(fn)`       | Custom dependency matcher          |
+| `.debounce(ms)`   | Delay execution                    |
+| `.throttle(ms)`   | Limit execution frequency          |
+| `.retry(count)`   | Retry failed async phases          |
+| `.catch(handler)` | Handle async errors                |
 
 ---
 
@@ -369,23 +355,33 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 
     const { onMount, onUnmount, onUpdate } = usePhase();
 
-### `onMount`
+### `onMount(callback)`
 
-    onMount(callback);
+Runs once after mount. Return a function for cleanup.
 
-Runs once after mount.
-
-### `onUnmount`
-
-    onUnmount(callback);
+### `onUnmount(callback)`
 
 Runs once before unmount.
 
-### `onUpdate`
+### `onUpdate(deps, callback)`
 
-    onUpdate(dependencies, callback);
+Returns a chainable `PhaseController<T>`.
 
-Returns a chainable phase controller.
+### `PhaseController<T>`
+
+    interface PhaseController<T extends Deps> {
+      loading: boolean;
+      error: unknown | null;
+      success: boolean;
+
+      and(): this;
+      or(): this;
+      when(fn: MatcherFn<T>): this;
+      debounce(ms: number): this;
+      throttle(ms: number): this;
+      retry(count: number): this;
+      catch(handler: (error: unknown) => void): this;
+    }
 
 ---
 
@@ -404,23 +400,6 @@ This library does not replace React internally. It provides a cleaner lifecycle 
 
 ---
 
-## Motivation
-
-React provides powerful primitives, but lifecycle logic often becomes fragmented as applications grow.
-
-`react-phase` aims to provide:
-
-- clearer lifecycle readability
-- structured update handling
-- predictable execution semantics
-- cleaner side effect orchestration
-- safer async behavior
-- better developer ergonomics
-
-...without changing React's mental model.
-
----
-
 ## Roadmap
 
 ### v1
@@ -430,12 +409,13 @@ React provides powerful primitives, but lifecycle logic often becomes fragmented
 - [x] update phase
 - [x] AND dependency execution
 - [x] OR dependency execution
-- [x] custom dependency matchers
+- [x] custom dependency matchers via `.when()`
 - [x] debounce support
 - [x] throttle support
 - [x] async orchestration
-- [x] retry handling
-- [x] request cancellation
+- [x] retry handling with exponential backoff
+- [x] request cancellation via AbortSignal
+- [x] full TypeScript support
 
 ### Future Ideas
 

@@ -222,7 +222,7 @@ export function useUpdate(): <T extends Deps>(
           forceUpdate((n) => n + 1);
 
           runWithRetry(
-            () => rawResult,
+            () => (callback as (ctx: { signal: AbortSignal }) => unknown)({ signal: ac.signal }) as Promise<unknown>,
             controller.retryCount,
             ac.signal
           )
