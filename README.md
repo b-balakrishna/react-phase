@@ -138,7 +138,7 @@ Run only when **all** dependencies change.
 
 ## Smart Matchers
 
-Create fully custom dependency execution logic using `.match()`.
+Create fully custom dependency execution logic using `.when()`.
 
 Useful for:
 - advanced update conditions
@@ -147,13 +147,13 @@ Useful for:
 - business-rule-driven execution
 
     onUpdate(dependencies, callback)
-      .match((prev, current) => boolean);
+      .when((prev, current) => boolean);
 
 **Threshold example:**
 
     onUpdate([price], () => {
       console.log("threshold crossed");
-    }).match((prev, current) => {
+    }).when((prev, current) => {
       return prev[0] < 1000 && current[0] >= 1000;
     });
 
@@ -161,14 +161,14 @@ Useful for:
 
     onUpdate([user, token], () => {
       console.log("authenticated");
-    }).match((prev, current) => {
+    }).when((prev, current) => {
       const [prevUser, prevToken] = prev;
       const [currentUser, currentToken] = current;
 
       return !prevUser && !prevToken && currentUser && currentToken;
     });
 
-> **Match Priority**: When `.match()` is used, `.and()` and `.or()` are ignored — custom matching becomes the execution source of truth.
+> **Match Priority**: When `.when()` is used, `.and()` and `.or()` are ignored — custom matching becomes the execution source of truth.
 
 ---
 
@@ -292,7 +292,7 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 
       onUpdate([price], () => {
         console.log("Threshold crossed");
-      }).match((prev, current) => {
+      }).when((prev, current) => {
         return prev[0] < 1000 && current[0] >= 1000;
       });
 
@@ -355,7 +355,7 @@ Async phases receive an `AbortSignal`. When the component unmounts, dependencies
 |-------------------|----------------------------------|
 | `.and()`          | Run when ALL dependencies change |
 | `.or()`           | Run when ANY dependency changes  |
-| `.match(fn)`      | Custom dependency matcher        |
+| `.when(fn)`      | Custom dependency matcher        |
 | `.debounce(ms)`   | Delay execution                  |
 | `.throttle(ms)`   | Limit execution frequency        |
 | `.retry(count)`   | Retry failed async phases        |
