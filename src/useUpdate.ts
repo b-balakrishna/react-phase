@@ -12,12 +12,14 @@ import type {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function depsChanged(prev: Deps, current: Deps): boolean {
+function depsChanged(prev: Deps | undefined, current: Deps): boolean {
+  if (prev === undefined) return true;
   if (prev.length !== current.length) return true;
   return prev.some((p, i) => !Object.is(p, current[i]));
 }
 
-function allDepsChanged(prev: Deps, current: Deps): boolean {
+function allDepsChanged(prev: Deps | undefined, current: Deps): boolean {
+  if (prev === undefined) return true;
   if (prev.length !== current.length) return true;
   return prev.every((p, i) => !Object.is(p, current[i]));
 }
