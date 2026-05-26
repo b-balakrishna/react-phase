@@ -1,6 +1,6 @@
 {
   "name": "react-phase",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "A phase-first lifecycle abstraction for React",
   "keywords": [
     "react",
