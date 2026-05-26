@@ -10,7 +10,7 @@
     "phase",
     "async"
   ],
-  "author": "",
+  "author": "b-balakrishna",
   "license": "MIT",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
